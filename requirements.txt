@@ -1,5 +1,6 @@
 Flask
 Flask-SocketIO
 numpy
-python-dotenv # If you used it for local .env files
-Flask-Cors # If you want to configure CORS
+python-dotenv
+Flask-Cors
+gunicorn
