@@ -1,0 +1,11 @@
+services:
+  - type: web
+	name: waveform-plotter-backend # Your service name (can be anything)
+	env: python
+	plan: free # Use the free tier
+	buildCommand: pip install -r requirements.txt
+	startCommand: python app.py # Command to start your Flask app
+	# If you want to set environment variables directly in render.yaml (e.g., SECRET_KEY)
+	# envVars:
+	#   - key: SECRET_KEY
+	#     value: a_very_long_and_random_string_here

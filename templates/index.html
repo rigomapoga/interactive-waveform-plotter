@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Waveform Plotter</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Socket.IO client library CDN -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            @apply bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4;
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            @apply bg-gray-800 p-8 rounded-xl shadow-lg border border-teal-700 flex flex-col items-center;
+            max-width: 900px;
+            width: 100%;
+        }
+        h1 {
+            @apply text-4xl font-bold text-teal-300 mb-8;
+        }
+        .controls {
+            @apply grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-8;
+        }
+        .control-group {
+            @apply flex flex-col items-center p-4 bg-gray-700 rounded-lg shadow-inner;
+        }
+        label {
+            @apply text-lg font-semibold text-gray-200 mb-2;
+        }
+        input[type="range"] {
+            @apply w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            @apply appearance-none w-5 h-5 bg-teal-500 rounded-full shadow-lg;
+        }
+        input[type="range"]::-moz-range-thumb {
+            @apply w-5 h-5 bg-teal-500 rounded-full shadow-lg;
+        }
+        select {
+            @apply w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-gray-100;
+        }
+        .value-display {
+            @apply mt-2 text-xl font-mono text-teal-400;
+        }
+        .chart-container {
+            @apply w-full h-[500px] bg-gray-700 rounded-lg shadow-inner flex items-center justify-center p-4;
+            height: 40vh;
+        }
+        canvas {
+            @apply w-full h-full;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Waveform Plotter</h1>
+
+        <div class="controls">
+            <!-- Wave Type Selector -->
+            <div class="control-group">
+                <label for="waveType">Wave Type:</label>
+                <select id="waveType" class="rounded-md">
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                    <option value="sawtooth">Sawtooth</option>
+                </select>
+            </div>
+
+            <!-- Frequency Slider -->
+            <div class="control-group">
+                <label for="frequency">Frequency (Hz):</label>
+                <input type="range" id="frequency" min="0.1" max="20" step="0.1" value="2">
+                <span id="frequencyValue" class="value-display">2.0 Hz</span>
+            </div>
+
+            <!-- Amplitude Slider -->
+            <div class="control-group">
+                <label for="amplitude">Amplitude:</label>
+                <input type="range" id="amplitude" min="0.1" max="1" step="0.01" value="0.7">
+                <span id="amplitudeValue" class="value-display">0.70</span>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="waveformChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const socket = io(); // Connect to Socket.IO server
+        let waveformChart; // Chart.js instance
+
+        // Get HTML elements
+        const waveTypeSelect = document.getElementById('waveType');
+        const frequencySlider = document.getElementById('frequency');
+        const amplitudeSlider = document.getElementById('amplitude');
+        const frequencyValueSpan = document.getElementById('frequencyValue');
+        const amplitudeValueSpan = document.getElementById('amplitudeValue');
+
+        // Function to send parameters to Python backend
+        function sendParams() {
+            const params = {
+                type: waveTypeSelect.value,
+                frequency: parseFloat(frequencySlider.value),
+                amplitude: parseFloat(amplitudeSlider.value)
+            };
+            socket.emit('update_params', params);
+            console.log('Sent params:', params);
+        }
+
+        // Update slider value displays
+        frequencySlider.addEventListener('input', () => {
+            frequencyValueSpan.textContent = `${parseFloat(frequencySlider.value).toFixed(1)} Hz`;
+            sendParams(); // Send new params on every slider change
+        });
+        amplitudeSlider.addEventListener('input', () => {
+            amplitudeValueSpan.textContent = `${parseFloat(amplitudeSlider.value).toFixed(2)}`;
+            sendParams(); // Send new params on every slider change
+        });
+        waveTypeSelect.addEventListener('change', sendParams); // Send new params on type change
+
+        // Initialize Chart.js
+        function initializeChart(initialData, initialParams) {
+            const ctx = document.getElementById('waveformChart').getContext('2d');
+            
+            // Generate labels for the x-axis (representing time/cycles)
+            const labels = Array.from({ length: initialData.length }, (_, i) =>
+                (i / initialData.length * initialParams.frequency).toFixed(2) // Approximate cycles
+            );
+
+            waveformChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Waveform Amplitude',
+                        data: initialData,
+                        borderColor: 'rgb(0, 255, 255)', // Cyan line
+                        backgroundColor: 'rgba(0, 255, 255, 0.1)', // Light cyan fill
+                        borderWidth: 2,
+                        pointRadius: 0, // No points for smooth line
+                        tension: 0.1 // Smooth line curve
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0 // Disable animation for immediate updates
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time / Cycles',
+                                color: '#e0e0e0'
+                            },
+                            ticks: {
+                                color: '#e0e0e0',
+                                maxRotation: 0,
+                                autoSkip: true,
+                                autoSkipPadding: 10
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Amplitude',
+                                color: '#e0e0e0'
+                            },
+                            beginAtZero: false,
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            min: -1, // Set minimum Y-axis value to -1
+                            max: 1   // Set maximum Y-axis value to 1
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#e0e0e0'
+                            }
+                        },
+                        tooltip: {
+                            enabled: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Socket.IO Event Listeners ---
+        socket.on('connect', () => {
+            console.log('Connected to server via WebSocket');
+            // When connected, the server will send initial waveform data
+        });
+
+        socket.on('waveform_data', (response) => {
+            console.log('Received waveform data:', response);
+            const waveData = response.data;
+            const params = response.params;
+
+            // Update controllers to reflect current state (especially on initial load)
+            waveTypeSelect.value = params.type;
+            frequencySlider.value = params.frequency;
+            amplitudeSlider.value = params.amplitude;
+            frequencyValueSpan.textContent = `${params.frequency.toFixed(1)} Hz`;
+            amplitudeValueSpan.textContent = `${params.amplitude.toFixed(2)}`;
+
+            // If chart not initialized, create it. Otherwise, update its data.
+            if (!waveformChart) {
+                initializeChart(waveData, params);
+            } else {
+                // Update chart data and labels
+                waveformChart.data.datasets[0].data = waveData;
+                waveformChart.data.labels = Array.from({ length: waveData.length }, (_, i) =>
+                    (i / waveData.length * params.frequency).toFixed(2)
+                );
+                waveformChart.update(); // Redraw the chart
+            }
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+
+        socket.on('error', (error) => {
+            console.error('Socket error:', error);
+        });
+
+    </script>
+</body>
+</html>
