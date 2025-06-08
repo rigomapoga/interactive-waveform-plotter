@@ -1,11 +1,14 @@
 services:
   - type: web
-	name: waveform-plotter-backend # Your service name (can be anything)
-	env: python
-	plan: free # Use the free tier
-	buildCommand: pip install -r requirements.txt
-	startCommand: python app.py # Command to start your Flask app
-	# If you want to set environment variables directly in render.yaml (e.g., SECRET_KEY)
-	# envVars:
-	#   - key: SECRET_KEY
-	#     value: a_very_long_and_random_string_here
+    name: waveform-plotter-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # New startCommand to use Gunicorn and link it with Socket.IO
+    # The 'app:app' means 'from app.py, run the app object'
+    # The '--worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker' is crucial
+    # for Flask-SocketIO's WebSockets to work correctly with Gunicorn.
+    startCommand: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: SECRET_KEY
+        value: your_super_secret_key_from_render_dashboard
